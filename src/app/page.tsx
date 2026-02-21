@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import { MessageCircle, Phone, MapPin, Clock, ChevronRight, X, Send, CheckCircle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { MessageCircle, Phone, MapPin, Clock, ChevronRight, X, Send, CheckCircle, Mic, MicOff, Volume2, MessageSquare } from 'lucide-react';
 
 export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -9,9 +9,15 @@ export default function Home() {
     { id: 1, type: 'bot', text: "Hi! I'm Taylor, your AI assistant. How can I help you today?" }
   ]);
   const [inputText, setInputText] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [showBooking, setShowBooking] = useState(false);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [bookingForm, setBookingForm] = useState({ name: '', phone: '', service: '', message: '' });
   const [bookingSubmitted, setBookingSubmitted] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'whatsapp'>('chat');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const services = [
     { icon: "🔧", title: "Emergency Plumbing", description: "24/7 rapid response for burst pipes, leaks, and urgent repairs", price: "From £85" },
@@ -30,6 +36,57 @@ export default function Home() {
     "Fully Insured & Certified",
     "Free Written Quotes"
   ];
+
+  // AI Voice Functions
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert("Voice input not supported in this browser. Try Chrome!");
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-GB';
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputText(transcript);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-GB';
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
@@ -59,6 +116,9 @@ export default function Home() {
       
       const botMessage = { id: Date.now() + 1, type: 'bot', text: response };
       setMessages(prev => [...prev, botMessage]);
+      
+      // Auto-speak the response
+      speakText(response);
     }, 500);
     
     setInputText('');
@@ -68,6 +128,11 @@ export default function Home() {
     e.preventDefault();
     setBookingSubmitted(true);
   };
+
+  // Scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -84,8 +149,17 @@ export default function Home() {
                 <p className="text-xs text-blue-200">Central London Experts</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <a href="tel:02079460123" className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition">
+            <div className="flex items-center gap-3">
+              <a 
+                href="https://wa.me/442079460123" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg transition"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+              <a href="tel:02079460123" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">020 7946 0123</span>
               </a>
@@ -127,6 +201,15 @@ export default function Home() {
                 <Phone className="w-5 h-5" />
                 Call Now
               </a>
+              <a 
+                href="https://wa.me/442079460123?text=Hi%20Taylor%20Plumbing,%20I%20need%20help%20with..." 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 bg-green-500 hover:bg-green-600 px-8 py-4 rounded-xl font-semibold transition"
+              >
+                <MessageCircle className="w-5 h-5" />
+                WhatsApp
+              </a>
             </div>
             <div className="flex items-center gap-6 mt-8 text-sm text-blue-200">
               <div className="flex items-center gap-2">
@@ -149,6 +232,38 @@ export default function Home() {
           <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M0 120L60 105C120 90 240 60 360 45C480 30 600 30 720 37.5C840 45 960 60 1080 67.5C1200 75 1320 75 1380 75L1440 75V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z" fill="white"/>
           </svg>
+        </div>
+      </section>
+
+      {/* AI Voice Agent Banner */}
+      <section className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-8">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                <Volume2 className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">🤖 New: AI Voice Assistant</h3>
+                <p className="text-purple-100">Talk to our AI! Click the microphone in the chat to speak naturally</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg">
+                <MessageCircle className="w-5 h-5" />
+                <span className="font-semibold">WhatsApp Available</span>
+              </div>
+              <a 
+                href="https://wa.me/442079460123"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-green-500 hover:bg-green-600 px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2"
+              >
+                <MessageSquare className="w-5 h-5" />
+                Chat Now
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -287,6 +402,10 @@ export default function Home() {
                   020 7946 0123
                 </p>
                 <p className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp: 020 7946 0123
+                </p>
+                <p className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
                   12 Upper Street, Islington, N1 0PQ
                 </p>
@@ -312,44 +431,105 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* AI Chat Widget */}
+      {/* AI Chat Widget with Voice & WhatsApp */}
       <div className="fixed bottom-6 right-6 z-50">
         {isChatOpen && (
-          <div className="bg-white rounded-2xl shadow-2xl w-80 h-96 mb-4 flex flex-col border overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-80 h-[500px] mb-4 flex flex-col border overflow-hidden">
+            {/* Tab Selector */}
+            <div className="flex border-b">
+              <button 
+                onClick={() => setActiveTab('chat')}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'chat' ? 'bg-blue-50 text-blue-900' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                AI Chat
+              </button>
+              <button 
+                onClick={() => setActiveTab('whatsapp')}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'whatsapp' ? 'bg-green-50 text-green-700' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                WhatsApp
+              </button>
+            </div>
+
+            {/* Chat Header */}
             <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5" />
-                <span className="font-semibold">Taylor AI Assistant</span>
+                {activeTab === 'chat' ? (
+                  <>
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="font-semibold">Taylor AI Assistant</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-5 h-5" />
+                    <span className="font-semibold">WhatsApp Chat</span>
+                  </>
+                )}
               </div>
               <button onClick={() => setIsChatOpen(false)} className="hover:bg-white/20 p-1 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.type === 'user' ? 'bg-blue-900 text-white' : 'bg-gray-100 text-gray-800'}`}>
-                    {msg.text}
-                  </div>
+
+            {/* Chat Content */}
+            {activeTab === 'chat' ? (
+              <>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.type === 'user' ? 'bg-blue-900 text-white' : 'bg-gray-100 text-gray-800'}`}>
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
                 </div>
-              ))}
-            </div>
-            <div className="p-3 border-t flex gap-2">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-900"
-              />
-              <button 
-                onClick={handleSendMessage}
-                className="bg-blue-900 text-white p-2 rounded-lg hover:bg-blue-800 transition"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
+                <div className="p-3 border-t flex gap-2">
+                  <button
+                    onClick={isListening ? stopListening : startListening}
+                    className={`p-2 rounded-lg transition ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    title="Voice input"
+                  >
+                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Type or speak..."
+                    className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-900"
+                  />
+                  <button 
+                    onClick={handleSendMessage}
+                    className="bg-blue-900 text-white p-2 rounded-lg hover:bg-blue-800 transition"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* WhatsApp Tab */
+              <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <MessageSquare className="w-10 h-10 text-green-500" />
+                </div>
+                <h4 className="font-bold text-gray-900 mb-2">Chat on WhatsApp</h4>
+                <p className="text-sm text-gray-500 mb-4">Get instant responses on WhatsApp!</p>
+                <a 
+                  href="https://wa.me/442079460123?text=Hi%20Taylor%20Plumbing,%20I%20need%20help%20with%20a%20plumbing%20issue"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Open WhatsApp
+                </a>
+                <p className="text-xs text-gray-400 mt-4">Mon-Fri: 8am-6pm<br/>Sat: 9am-4pm</p>
+              </div>
+            )}
           </div>
         )}
         <button
@@ -380,9 +560,20 @@ export default function Home() {
                   </div>
                   <h4 className="text-xl font-bold mb-2">Booking Received!</h4>
                   <p className="text-gray-600 mb-4">We'll contact you within 30 minutes to confirm your appointment.</p>
+                  <div className="flex flex-col gap-2">
+                    <a 
+                      href="https://wa.me/442079460123"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      Also message us on WhatsApp
+                    </a>
+                  </div>
                   <button 
                     onClick={() => { setShowBooking(false); setBookingSubmitted(false); }}
-                    className="bg-blue-900 text-white px-6 py-2 rounded-lg hover:bg-blue-800 transition"
+                    className="mt-4 text-gray-500 hover:text-gray-700"
                   >
                     Close
                   </button>
